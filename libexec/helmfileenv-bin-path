@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Summary: Display the directory where helmfile exists
+# Usage: helmfileenv bin-path
+#
+# Displays the directory where helmfile is installed.
+
+set -e
+[ -n "$HELMFILEENV_DEBUG" ] && set -x
+
+remove_from_path() {
+  local path_to_remove="$1"
+  local path_before
+  local result=":${PATH//\~/$HOME}:"
+  while [ "$path_before" != "$result" ]; do
+    path_before="$result"
+    result="${result//:$path_to_remove:/:}"
+  done
+  result="${result%:}"
+  echo "${result#:}"
+}
+
+if [ -n "$1" ]; then
+  export HELMFILEENV_VERSION="$1"
+elif [ -z "$HELMFILEENV_VERSION" ]; then
+  HELMFILEENV_VERSION="$(helmfileenv-version-name)"
+fi
+
+if [ "$HELMFILEENV_VERSION" = "system" ]; then
+  SYSTEM_KUBECTL_PATH=$(PATH="$(remove_from_path "${HELMFILEENV_ROOT}/bin")" command -v helmfile)
+  if KUBECTL_BIN_PATH="${SYSTEM_KUBECTL_PATH}"; then
+    KUBECTL_BIN_PATH="${SYSTEM_KUBECTL_PATH%/*}"
+    echo "${KUBECTL_BIN_PATH:-/}"
+    exit
+  else
+    echo "helmfileenv: system version not found in PATH" >&2
+    exit 1
+  fi
+fi
+
+HELMFILEENV_BIN_PATH="${HELMFILEENV_ROOT}/versions/${HELMFILEENV_VERSION}/bin"
+if [ ! -d "$HELMFILEENV_BIN_PATH" ]; then
+  echo "helmfileenv: version \`${HELMFILEENV_VERSION}' is not installed" >&2
+  exit 1
+fi
+
+echo "$HELMFILEENV_BIN_PATH"

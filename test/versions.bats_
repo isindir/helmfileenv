@@ -1,0 +1,147 @@
+#!/usr/bin/env bats
+
+load test_helper
+
+setup() {
+  mkdir -p "$HELMFILEENV_TEST_DIR"
+  cd "$HELMFILEENV_TEST_DIR"
+}
+
+stub_system_helmfile() {
+  local stub="${HELMFILEENV_TEST_DIR}/bin/helmfile"
+  mkdir -p "$(dirname "$stub")"
+  touch "$stub" && chmod +x "$stub"
+}
+
+@test "no versions installed" {
+  stub_system_helmfile
+  assert [ ! -d "${HELMFILEENV_ROOT}/versions" ]
+  run helmfileenv-versions
+  assert_success "* system (set by ${HELMFILEENV_ROOT}/version)"
+}
+
+
+@test "bare output no versions installed" {
+  assert [ ! -d "${HELMFILEENV_ROOT}/versions" ]
+  run helmfileenv-versions --bare
+  assert_success ""
+}
+
+@test "single version installed" {
+  stub_system_helmfile
+  create_version "1.9"
+  run helmfileenv-versions
+  assert_success
+  assert_output <<OUT
+* system (set by ${HELMFILEENV_ROOT}/version)
+  1.9
+OUT
+}
+
+@test "single version bare" {
+  create_version "1.9"
+  run helmfileenv-versions --bare
+  assert_success "1.9"
+}
+
+@test "multiple versions" {
+  stub_system_helmfile
+  create_version "1.10.8"
+  create_version "1.11.3"
+  create_version "1.13.0"
+  run helmfileenv-versions
+  assert_success
+  assert_output <<OUT
+* system (set by ${HELMFILEENV_ROOT}/version)
+  1.10.8
+  1.11.3
+  1.13.0
+OUT
+}
+
+@test "indicates current version" {
+  stub_system_helmfile
+  create_version "1.11.3"
+  create_version "1.13.0"
+  HELMFILEENV_VERSION=1.11.3 run helmfileenv-versions
+  assert_success
+  assert_output <<OUT
+  system
+* 1.11.3 (set by HELMFILEENV_VERSION environment variable)
+  1.13.0
+OUT
+}
+
+@test "bare doesn't indicate current version" {
+  create_version "1.11.3"
+  create_version "1.13.0"
+  HELMFILEENV_VERSION=1.11.3 run helmfileenv-versions --bare
+  assert_success
+  assert_output <<OUT
+1.11.3
+1.13.0
+OUT
+}
+
+@test "globally selected version" {
+  stub_system_helmfile
+  create_version "1.11.3"
+  create_version "1.13.0"
+  cat > "${HELMFILEENV_ROOT}/version" <<<"1.11.3"
+  run helmfileenv-versions
+  assert_success
+  assert_output <<OUT
+  system
+* 1.11.3 (set by ${HELMFILEENV_ROOT}/version)
+  1.13.0
+OUT
+}
+
+@test "per-project version" {
+  stub_system_helmfile
+  create_version "1.11.3"
+  create_version "1.13.0"
+  cat > ".helmfile-version" <<<"1.11.3"
+  run helmfileenv-versions
+  assert_success
+  assert_output <<OUT
+  system
+* 1.11.3 (set by ${HELMFILEENV_TEST_DIR}/.helmfile-version)
+  1.13.0
+OUT
+}
+
+@test "ignores non-directories under versions" {
+  create_version "1.9"
+  touch "${HELMFILEENV_ROOT}/versions/hello"
+
+  run helmfileenv-versions --bare
+  assert_success "1.9"
+}
+
+@test "lists symlinks under versions" {
+  create_version "1.10.8"
+  ln -s "1.10.8" "${HELMFILEENV_ROOT}/versions/1.10"
+
+  run helmfileenv-versions --bare
+  assert_success
+  assert_output <<OUT
+1.10
+1.10.8
+OUT
+}
+
+@test "doesn't list symlink aliases when --skip-aliases" {
+  create_version "1.10.8"
+  ln -s "1.10.8" "${HELMFILEENV_ROOT}/versions/1.10"
+  mkdir moo
+  ln -s "${PWD}/moo" "${HELMFILEENV_ROOT}/versions/1.9"
+
+  run helmfileenv-versions --bare --skip-aliases
+  assert_success
+
+  assert_output <<OUT
+1.10.8
+1.9
+OUT
+}

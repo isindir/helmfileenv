@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Usage: helmfileenv install <version>
+# Summary: Install the specified version of helmfile
+
+[ -n "${HELMFILEENV_DEBUG}" ] && set -x
+source ${HELMFILEENV_ROOT}/libexec/helpers.sh
+
+[ "${#}" -gt 1 ] && error_and_die "usage: helmfileenv install [<version>]"
+
+declare version
+
+if [ -z "${1}" ]; then
+  version_file="$(helmfileenv-version-file)"
+  if [ "${version_file}" != "${HELMFILEENV_ROOT}/version" ]; then
+    version="$(cat ${version_file} || true)"
+  fi
+else
+  version="${1}"
+fi
+
+dst_path="${HELMFILEENV_ROOT}/versions/${version}/bin"
+if [ -f "${dst_path}/helmfile" ]; then
+  echo "helmfile v${version} is already installed"
+  exit 0
+fi
+
+HELMFILEENV_ARCH=${HELMFILEENV_ARCH:-amd64}
+case "$(uname -s)" in
+  Darwin*)
+    os="darwin_${HELMFILEENV_ARCH}"
+    ;;
+  MINGW64*)
+    os="windows_${HELMFILEENV_ARCH}"
+    ;;
+  MSYS_NT*)
+    os="windows_${HELMFILEENV_ARCH}"
+    ;;
+  CYGWIN_NT*)
+    os="windows_${HELMFILEENV_ARCH}"
+    ;;
+  *)
+    os="linux_${HELMFILEENV_ARCH}"
+    ;;
+esac
+
+helmfile_url="https://github.com/roboll/helmfile/releases/download/v${version}/helmfile_${os}"
+
+
+info "Installing helmfile v${version}"
+mkdir -p "${dst_path}" || error_and_die "Failed to make directory ${dst_path}"
+wget -q "${helmfile_url}" -O "${dst_path}/helmfile" || error_and_die "Download failed"
+chmod +x "${dst_path}/helmfile"
+
+info "Installation of helmfile v${version} successful"

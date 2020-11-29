@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Usage: helmfileenv version-file-write <file> <version>
+
+set -e
+[ -n "$HELMFILEENV_DEBUG" ] && set -x
+
+HELMFILEENV_VERSION_FILE="$1"
+HELMFILEENV_VERSION="$2"
+
+if [ -z "$HELMFILEENV_VERSION" ] || [ -z "$HELMFILEENV_VERSION_FILE" ]; then
+  helmfileenv-help --usage version-file-write >&2
+  exit 1
+fi
+
+# Make sure the specified version is installed.
+helmfileenv-bin-path "$HELMFILEENV_VERSION" > /dev/null
+
+# Write the version out to disk.
+echo "$HELMFILEENV_VERSION" > "$HELMFILEENV_VERSION_FILE"

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Summary: Explain how the current helmfile version is set
+set -e
+[ -n "$HELMFILEENV_DEBUG" ] && set -x
+
+unset HELMFILEENV_VERSION_ORIGIN
+
+if [ -n "$HELMFILEENV_VERSION_ORIGIN" ]; then
+  echo "$HELMFILEENV_VERSION_ORIGIN"
+elif [ -n "$HELMFILEENV_VERSION" ]; then
+  echo "HELMFILEENV_VERSION environment variable"
+else
+  helmfileenv-version-file
+fi

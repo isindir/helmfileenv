@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+set -e
+
+if [ "$1" = "--debug" ]; then
+  export HELMFILEENV_DEBUG=1
+  shift
+fi
+
+if [ -n "$HELMFILEENV_DEBUG" ]; then
+  export PS4='+ [${BASH_SOURCE##*/}:${LINENO}] '
+  set -x
+fi
+
+abort() {
+  { if [ "$#" -eq 0 ]; then cat -
+    else echo "helmfileenv: $*"
+    fi
+  } >&2
+  exit 1
+}
+
+READLINK=$(type -p greadlink readlink | head -1)
+[ -n "$READLINK" ] || abort "cannot find readlink - are you missing GNU coreutils?"
+
+resolve_link() {
+  $READLINK "$1"
+}
+
+abs_dirname() {
+  local cwd="$PWD"
+  local path="$1"
+
+  while [ -n "$path" ]; do
+    cd "${path%/*}"
+    local name="${path##*/}"
+    path="$(resolve_link "$name" || true)"
+  done
+
+  pwd
+  cd "$cwd"
+}
+
+if [ -z "${HELMFILEENV_ROOT}" ]; then
+  HELMFILEENV_ROOT="${HOME}/.helmfileenv"
+else
+  HELMFILEENV_ROOT="${HELMFILEENV_ROOT%/}"
+fi
+export HELMFILEENV_ROOT
+
+if [ -z "${HELMFILEENV_DIR}" ]; then
+  HELMFILEENV_DIR="$PWD"
+else
+  [[ $HELMFILEENV_DIR == /* ]] || HELMFILEENV_DIR="$PWD/$HELMFILEENV_DIR"
+  cd "$HELMFILEENV_DIR" 2>/dev/null || abort "cannot change working directory to \`$HELMFILEENV_DIR'"
+  HELMFILEENV_DIR="$PWD"
+  cd "$OLDPWD"
+fi
+export HELMFILEENV_DIR
+
+
+shopt -s nullglob
+
+bin_path="$(abs_dirname "$0")"
+export PATH="${bin_path}:${PATH}"
+
+shopt -u nullglob
+
+command="$1"
+case "$command" in
+"" )
+  { helmfileenv---version
+    helmfileenv-help
+  } | abort
+  ;;
+-v | --version )
+  exec helmfileenv---version
+  ;;
+-h | --help )
+  exec helmfileenv-help
+  ;;
+* )
+  command_path="$(command -v "helmfileenv-$command" || true)"
+  if [ -z "$command_path" ]; then
+    if [ "$command" == "shell" ]; then
+      abort "shell integration not enabled. Run \`helmfileenv init' for instructions."
+    else
+      abort "no such command \`$command'"
+    fi
+  fi
+
+  shift 1
+  if [ "$1" = --help ]; then
+    if [[ "$command" == "sh-"* ]]; then
+      echo "helmfileenv help \"$command\""
+    else
+      exec helmfileenv-help "$command"
+    fi
+  else
+    exec "$command_path" "$@"
+  fi
+  ;;
+esac
